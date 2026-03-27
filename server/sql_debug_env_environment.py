@@ -16,7 +16,6 @@ try:
 except ImportError:
     from sql_debug_env.models import SqlDebugAction, SqlDebugObservation
 
-
 TASKS = [
     {
         "task_id": "task_easy",
@@ -92,9 +91,54 @@ TASKS = [
         "task_id": "task_hard",
         "difficulty": "hard",
         "description": (
-            "Fix the broken subquery. The query should return the names of "
-            "employees whose salary is above the average salary of their "
-            "department. The subquery uses the wrong column for AVG."
+            "Fix the broken query. The query should return each department name "
+            "along with the number of employees in that department who earn more "
+            "than the company-wide average salary, but only for departments that "
+            "have at least 2 such employees. The query has multiple bugs."
+        ),
+        "db_schema": (
+            "CREATE TABLE employees (\n"
+            "    id INTEGER PRIMARY KEY,\n"
+            "    name TEXT NOT NULL,\n"
+            "    department TEXT,\n"
+            "    salary REAL\n"
+            ");"
+        ),
+        "seed_data": [
+            "INSERT INTO employees VALUES (1, 'Alice', 'Engineering', 90000);",
+            "INSERT INTO employees VALUES (2, 'Bob', 'Engineering', 70000);",
+            "INSERT INTO employees VALUES (3, 'Carol', 'Marketing', 60000);",
+            "INSERT INTO employees VALUES (4, 'Dave', 'Marketing', 80000);",
+            "INSERT INTO employees VALUES (5, 'Eve', 'Engineering', 95000);",
+            "INSERT INTO employees VALUES (6, 'Frank', 'Engineering', 72000);",
+            "INSERT INTO employees VALUES (7, 'Grace', 'Marketing', 55000);",
+        ],
+        "broken_query": (
+            "SELECT department, COUNT(*) as high_earners "
+            "FROM employees "
+            "WHERE salary > (SELECT AVG(salary) FROM employees) "
+            "GROUP BY department "
+            "HAVING COUNT(*) > 3;"
+        ),
+        "error_hint": "The HAVING clause threshold is wrong. Review what count qualifies as 'at least 2'.",
+        "correct_query": (
+            "SELECT department, COUNT(*) as high_earners "
+            "FROM employees "
+            "WHERE salary > (SELECT AVG(salary) FROM employees) "
+            "GROUP BY department "
+            "HAVING COUNT(*) >= 2;"
+        ),
+        "expected_result": [("Engineering", 2)],
+    },
+    {
+        "task_id": "task_expert",
+        "difficulty": "expert",
+        "description": (
+            "Fix the broken window function query. The query should return "
+            "each employee's name, salary, and their salary rank within their "
+            "department (1 = highest paid). It should also return the difference "
+            "between their salary and the highest salary in their department. "
+            "The query has multiple bugs in the window functions."
         ),
         "db_schema": (
             "CREATE TABLE employees (\n"
@@ -112,21 +156,25 @@ TASKS = [
             "INSERT INTO employees VALUES (5, 'Eve', 'Engineering', 95000);",
         ],
         "broken_query": (
-            "SELECT name FROM employees e1 "
-            "WHERE salary > ("
-            "SELECT AVG(id) FROM employees e2 "
-            "WHERE e2.department = e1.department"
-            ");"
+            "SELECT name, salary, "
+            "RANK() OVER (PARTITION BY department ORDER BY salary ASC) as dept_rank, "
+            "salary - MAX(salary) OVER (PARTITION BY id) as diff_from_top "
+            "FROM employees;"
         ),
-        "error_hint": "The subquery uses AVG(id) but should use AVG(salary).",
+        "error_hint": "There are two bugs: the ranking order is wrong, and the MAX window partition is wrong.",
         "correct_query": (
-            "SELECT name FROM employees e1 "
-            "WHERE salary > ("
-            "SELECT AVG(salary) FROM employees e2 "
-            "WHERE e2.department = e1.department"
-            ");"
+            "SELECT name, salary, "
+            "RANK() OVER (PARTITION BY department ORDER BY salary DESC) as dept_rank, "
+            "salary - MAX(salary) OVER (PARTITION BY department) as diff_from_top "
+            "FROM employees;"
         ),
-        "expected_result": [("Alice",), ("Dave",), ("Eve",)],
+        "expected_result": [
+            ("Alice", 90000.0, 2, -5000.0),
+            ("Bob", 70000.0, 3, -25000.0),
+            ("Carol", 60000.0, 2, -20000.0),
+            ("Dave", 80000.0, 1, 0.0),
+            ("Eve", 95000.0, 1, 0.0),
+        ],
     },
 ]
 

@@ -19,4 +19,7 @@ tasks:
     description: "Fix a broken JOIN condition"
   - id: task_hard
     difficulty: hard
-    description: "Fix a broken correlated subquery with wrong aggregation"
+    description: "Fix a GROUP BY query with wrong HAVING threshold"
+  - id: task_expert
+    difficulty: expert
+    description: "Fix a broken window function query with two bugs"
