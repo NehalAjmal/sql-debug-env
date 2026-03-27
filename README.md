@@ -55,9 +55,13 @@ Expected difficulty: any competent LLM should score 1.0.
 The agent fixes a JOIN query where the ON condition matches the wrong columns (`employees.id` instead of `employees.dept_id`).
 Expected difficulty: requires understanding of relational schema structure.
 
-### Task 3 — Hard: Broken Correlated Subquery
-The agent fixes a correlated subquery that uses `AVG(id)` instead of `AVG(salary)` to compare employee salaries against department averages.
-Expected difficulty: requires understanding of correlated subqueries and aggregation semantics.
+### Task 3 — Hard: GROUP BY with Wrong HAVING Threshold
+The agent fixes a GROUP BY query that finds departments with high earners, but the HAVING clause uses the wrong comparison operator and threshold.
+Expected difficulty: requires understanding of aggregation filtering logic.
+
+### Task 4 — Expert: Broken Window Functions
+The agent fixes two bugs in a window function query — a wrong ORDER BY direction in RANK() and a wrong PARTITION BY column in MAX().
+Expected difficulty: requires deep understanding of SQL window functions.
 
 ## Reward Function
 
@@ -75,6 +79,7 @@ Expected difficulty: requires understanding of correlated subqueries and aggrega
 | task_easy | Easy | llama-3.3-70b-versatile | 1.0 |
 | task_medium | Medium | llama-3.3-70b-versatile | 1.0 |
 | task_hard | Hard | llama-3.3-70b-versatile | 1.0 |
+| task_expert | Expert | llama-3.3-70b-versatile | 1.0 |
 | **Overall** | | | **1.0** |
 
 ## Setup & Usage

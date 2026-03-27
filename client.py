@@ -4,7 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Sql Debug Env Environment Client."""
+"""SQL Debug Environment Client."""
 
 from typing import Dict
 
@@ -19,80 +19,53 @@ class SqlDebugEnv(
     EnvClient[SqlDebugAction, SqlDebugObservation, State]
 ):
     """
-    Client for the Sql Debug Env Environment.
+    Client for the SQL Debug Environment.
 
-    This client maintains a persistent WebSocket connection to the environment server,
-    enabling efficient multi-step interactions with lower latency.
-    Each client instance has its own dedicated environment session on the server.
+    The agent receives a broken SQL query and database schema,
+    and must return a corrected query that produces the expected result.
 
     Example:
-        >>> # Connect to a running server
         >>> with SqlDebugEnv(base_url="http://localhost:8000") as client:
         ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
+        ...     print(result.observation.broken_query)
         ...
-        ...     result = client.step(SqlDebugAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
-
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = SqlDebugEnv.from_docker_image("sql_debug_env-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(SqlDebugAction(message="Test"))
-        ... finally:
-        ...     client.close()
+        ...     result = client.step(SqlDebugAction(fixed_query="SELECT name FROM employees;"))
+        ...     print(result.observation.score)
+        ...     print(result.observation.feedback)
     """
 
     def _step_payload(self, action: SqlDebugAction) -> Dict:
-        """
-        Convert SqlDebugAction to JSON payload for step message.
-
-        Args:
-            action: SqlDebugAction instance
-
-        Returns:
-            Dictionary representation suitable for JSON encoding
-        """
+        """Convert SqlDebugAction to JSON payload for step message."""
         return {
-            "message": action.message,
+            "fixed_query": action.fixed_query,
         }
 
     def _parse_result(self, payload: Dict) -> StepResult[SqlDebugObservation]:
-        """
-        Parse server response into StepResult[SqlDebugObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with SqlDebugObservation
-        """
+        """Parse server response into StepResult[SqlDebugObservation]."""
         obs_data = payload.get("observation", {})
         observation = SqlDebugObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
+            task_id=obs_data.get("task_id", ""),
+            broken_query=obs_data.get("broken_query", ""),
+            db_schema=obs_data.get("db_schema", ""),
+            error_hint=obs_data.get("error_hint", ""),
+            task_description=obs_data.get("task_description", ""),
+            difficulty=obs_data.get("difficulty", ""),
+            score=obs_data.get("score", 0.0),
+            feedback=obs_data.get("feedback", ""),
+            attempt=obs_data.get("attempt", 0),
+            max_attempts=obs_data.get("max_attempts", 3),
             done=payload.get("done", False),
-            reward=payload.get("reward"),
+            reward=payload.get("reward", 0.0),
             metadata=obs_data.get("metadata", {}),
         )
-
         return StepResult(
             observation=observation,
-            reward=payload.get("reward"),
+            reward=payload.get("reward", 0.0),
             done=payload.get("done", False),
         )
 
     def _parse_state(self, payload: Dict) -> State:
-        """
-        Parse server response into State object.
-
-        Args:
-            payload: JSON response from state request
-
-        Returns:
-            State object with episode_id and step_count
-        """
+        """Parse server response into State object."""
         return State(
             episode_id=payload.get("episode_id"),
             step_count=payload.get("step_count", 0),

@@ -1,6 +1,6 @@
 {
   "model": "llama-3.3-70b-versatile",
-  "base_url": "http://localhost:7560",
+  "base_url": "https://nehubaby-sql-debug-env.hf.space",
   "total_score": 1.0,
   "results": [
     {
