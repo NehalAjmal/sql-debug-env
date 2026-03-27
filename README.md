@@ -17,6 +17,10 @@ An OpenEnv reinforcement learning environment where an AI agent debugs and fixes
 
 The agent receives a broken SQL query along with the database schema and a hint about what's wrong. It must return a corrected SQL query that executes successfully and produces the expected result. The environment uses an in-memory SQLite database so no external database setup is needed.
 
+## Motivation
+
+SQL debugging is a task every software engineer and data analyst encounters regularly. Existing RL benchmarks focus heavily on games and synthetic puzzles, leaving a gap for environments grounded in real developer workflows. This environment fills that gap — it provides a structured, reproducible way to train and evaluate LLM agents on a skill that has immediate practical value. The programmatic grader means evaluation is fully automated with no human labeling required, making it ideal for large-scale agent training pipelines.
+
 ## Action Space
 ```json
 {
@@ -118,7 +122,7 @@ python baseline.py --base-url https://your-username-sql-debug-env.hf.space
 ```python
 import requests
 
-base = "http://localhost:8000"
+base = "http://localhost:7860"
 
 # Start episode
 obs = requests.post(f"{base}/reset").json()
