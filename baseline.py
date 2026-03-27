@@ -1,7 +1,7 @@
 """
 Baseline inference script for SQL Debug Environment.
 
-Runs a baseline LLM agent (Groq or OpenAI) against all 3 tasks.
+Runs a baseline LLM agent (Groq or OpenAI) against all 4 tasks.
 
 Usage:
     export GROQ_API_KEY="your_key"      # recommended (free)

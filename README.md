@@ -87,7 +87,7 @@ Expected difficulty: requires deep understanding of SQL window functions.
 ### Run locally with Docker
 ```bash
 docker build -f server/Dockerfile -t sql-debug-env:latest .
-docker run -p 8000:8000 -e GROQ_API_KEY="your_key" sql-debug-env:latest
+docker run -p 7860:7860 -e GROQ_API_KEY="your_key" sql-debug-env:latest
 ```
 
 ### Run baseline script

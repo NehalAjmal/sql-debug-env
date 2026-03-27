@@ -15,7 +15,7 @@ Endpoints:
     - WS   /ws          : WebSocket endpoint
     - GET  /tasks       : List all tasks and action schema
     - POST /grader      : Score a query against a task
-    - POST /baseline    : Run baseline agent across all 3 tasks
+    - POST /baseline    : Run baseline agent across all 4 tasks
 """
 
 import os
