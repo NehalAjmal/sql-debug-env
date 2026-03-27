@@ -1,0 +1,22 @@
+spec_version: 1
+name: sql_debug_env
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+description: "An RL environment where an AI agent debugs and fixes broken SQL queries"
+tags:
+  - openenv
+  - sql
+  - debugging
+  - real-world
+tasks:
+  - id: task_easy
+    difficulty: easy
+    description: "Fix a SELECT query with syntax typos"
+  - id: task_medium
+    difficulty: medium
+    description: "Fix a broken JOIN condition"
+  - id: task_hard
+    difficulty: hard
+    description: "Fix a broken correlated subquery with wrong aggregation"

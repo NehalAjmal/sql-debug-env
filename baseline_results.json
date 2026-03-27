@@ -1,0 +1,28 @@
+{
+  "model": "llama-3.3-70b-versatile",
+  "base_url": "http://localhost:8000",
+  "total_score": 1.0,
+  "results": [
+    {
+      "task_id": "task_easy",
+      "difficulty": "easy",
+      "fixed_query": "SELECT name, age FROM employees;",
+      "score": 1.0,
+      "feedback": "Perfect! Query is correct and returns the expected result."
+    },
+    {
+      "task_id": "task_medium",
+      "difficulty": "medium",
+      "fixed_query": "SELECT employees.name, departments.manager FROM employees JOIN departments ON employees.dept_id = departments.id;",
+      "score": 1.0,
+      "feedback": "Perfect! Query is correct and returns the expected result."
+    },
+    {
+      "task_id": "task_hard",
+      "difficulty": "hard",
+      "fixed_query": "SELECT name FROM employees e1 WHERE salary > (SELECT AVG(salary) FROM employees e2 WHERE e2.department = e1.department)",
+      "score": 1.0,
+      "feedback": "Perfect! Query is correct and returns the expected result."
+    }
+  ]
+}
