@@ -90,8 +90,8 @@ Expected difficulty: requires deep understanding of SQL window functions.
 
 ### Run locally with Docker
 ```bash
-docker build -f server/Dockerfile -t sql-debug-env:latest .
-docker run -p 7860:7860 -e GROQ_API_KEY="your_key" sql-debug-env:latest
+docker build -t sql-debug-env:latest .
+docker run -p 7860:7860 -e API_BASE_URL="https://api.groq.com/openai/v1" -e MODEL_NAME="llama-3.3-70b-versatile" -e HF_TOKEN="your_key" sql-debug-env:latest
 ```
 
 ### Run baseline script
@@ -99,6 +99,15 @@ docker run -p 7860:7860 -e GROQ_API_KEY="your_key" sql-debug-env:latest
 pip install openenv-core openai requests
 export GROQ_API_KEY="your_key"
 python baseline.py
+```
+
+### Run inference script
+```bash
+pip install openenv-core openai requests
+export API_BASE_URL="https://api.groq.com/openai/v1"
+export MODEL_NAME="llama-3.3-70b-versatile"
+export HF_TOKEN="your_key"
+python inference.py --base-url https://nehubaby-sql-debug-env.hf.space
 ```
 
 ### Run against deployed Space
