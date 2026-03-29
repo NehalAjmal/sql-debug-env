@@ -182,7 +182,12 @@ TASKS = [
 def _run_query(db_schema: str, seed_data: list[str], query: str):
     conn = sqlite3.connect(":memory:")
     try:
-        conn.executescript(db_schema)
+        # executescript needs each statement to end with semicolon
+        # Normalize and execute schema statements one by one for reliability
+        schema_statements = [s.strip() for s in db_schema.split(";") if s.strip()]
+        for stmt in schema_statements:
+            conn.execute(stmt)
+        conn.commit()
         for stmt in seed_data:
             conn.execute(stmt)
         conn.commit()
