@@ -2,18 +2,12 @@
 Inference Script for SQL Debug Environment
 ===================================
 MANDATORY environment variables:
-  API_BASE_URL  - The API endpoint for the LLM (e.g. https://router.huggingface.co/v1)
-  MODEL_NAME    - The model identifier to use for inference
-  HF_TOKEN      - Your Hugging Face / API key
+  API_BASE_URL  The API endpoint for the LLM.
+  MODEL_NAME    The model identifier to use for inference.
+  HF_TOKEN      Your Hugging Face / API key.
 
-Usage:
-    export API_BASE_URL="https://api.groq.com/openai/v1"
-    export MODEL_NAME="llama-3.3-70b-versatile"
-    export HF_TOKEN="your_groq_or_hf_token"
-    python inference.py
-
-    # Against a deployed HF Space:
-    python inference.py --base-url https://nehubaby-sql-debug-env.hf.space
+- The inference script must be named `inference.py` and placed in the root directory of the project
+- Participants must use OpenAI Client for all LLM calls using above variables
 """
 
 import argparse
@@ -24,35 +18,20 @@ import sys
 import requests
 from openai import OpenAI
 
-
 # ---------------------------------------------------------------------------
-# Mandatory environment variables (per hackathon spec)
+# Mandatory env variables (per hackathon spec)
 # ---------------------------------------------------------------------------
-
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
-HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+MAX_STEPS = 3
+TEMPERATURE = 0.0
+MAX_TOKENS = 300
 DEFAULT_BASE_URL = "http://localhost:7860"
-
-MAX_STEPS = 3       # max attempts per task
-TEMPERATURE = 0.0   # deterministic output
-MAX_TOKENS = 300    # well within memory limits
-
-
-def get_llm_client() -> OpenAI:
-    """Return an OpenAI-compatible client using mandatory env variables."""
-    if not HF_TOKEN:
-        print("ERROR: Set HF_TOKEN (or GROQ_API_KEY / OPENAI_API_KEY)")
-        sys.exit(1)
-
-    print(f"Using model  : {MODEL_NAME}")
-    print(f"API base URL : {API_BASE_URL}")
-
-    return OpenAI(
-        api_key=HF_TOKEN,
-        base_url=API_BASE_URL,
-    )
 
 
 def fix_query_with_llm(client: OpenAI, task: dict) -> str:
@@ -74,20 +53,26 @@ Return ONLY the corrected SQL query with no explanation, no markdown, no backtic
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=MAX_TOKENS,
         temperature=TEMPERATURE,
+        max_tokens=MAX_TOKENS,
+        stream=False,
     )
-    return response.choices[0].message.content.strip()
+    return response.choices[0].message.content or ""
 
 
-def run_inference(base_url: str) -> dict:
-    """Run the inference agent against all tasks and return results."""
+def main(base_url: str = DEFAULT_BASE_URL) -> None:
+    if not API_KEY:
+        print("ERROR: Set HF_TOKEN or API_KEY environment variable.")
+        sys.exit(1)
+
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+
     print(f"\n{'='*60}")
     print("SQL Debug Environment — Inference Evaluation")
-    print(f"Server : {base_url}")
+    print(f"Server    : {base_url}")
+    print(f"Model     : {MODEL_NAME}")
+    print(f"API URL   : {API_BASE_URL}")
     print(f"{'='*60}\n")
-
-    client = get_llm_client()
 
     # Fetch all tasks from the environment
     resp = requests.get(f"{base_url}/tasks", timeout=30)
@@ -102,25 +87,38 @@ def run_inference(base_url: str) -> dict:
         print(f"  Description : {task['description']}")
         print(f"  Broken Query: {task['broken_query']}")
 
-        # Get LLM fix
-        fixed_query = fix_query_with_llm(client, task)
-        print(f"  Fixed Query : {fixed_query}")
+        # Get LLM fix (up to MAX_STEPS attempts)
+        fixed_query = ""
+        score = 0.0
+        feedback = ""
 
-        # Grade it via /grader endpoint
-        grade_resp = requests.post(
-            f"{base_url}/grader",
-            json={"task_id": task["task_id"], "fixed_query": fixed_query},
-            timeout=30,
-        )
-        grade_resp.raise_for_status()
-        grade = grade_resp.json()
+        for step in range(1, MAX_STEPS + 1):
+            try:
+                fixed_query = fix_query_with_llm(client, task)
+            except Exception as exc:
+                print(f"  Model request failed ({exc}). Skipping.")
+                break
 
-        score = grade["score"]
-        feedback = grade["feedback"]
-        print(f"  Score       : {score}")
-        print(f"  Feedback    : {feedback}")
+            print(f"  Step {step} Fixed Query: {fixed_query}")
+
+            grade_resp = requests.post(
+                f"{base_url}/grader",
+                json={"task_id": task["task_id"], "fixed_query": fixed_query},
+                timeout=30,
+            )
+            grade_resp.raise_for_status()
+            grade = grade_resp.json()
+            score = grade["score"]
+            feedback = grade["feedback"]
+
+            print(f"  Score       : {score}")
+            print(f"  Feedback    : {feedback}")
+
+            if score == 1.0:
+                print("  ✓ Solved!")
+                break
+
         print()
-
         results.append({
             "task_id": task["task_id"],
             "difficulty": task["difficulty"],
@@ -148,8 +146,6 @@ def run_inference(base_url: str) -> dict:
         json.dump(output, f, indent=2)
     print("Results saved to inference_results.json")
 
-    return output
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SQL Debug Env Inference")
@@ -159,4 +155,4 @@ if __name__ == "__main__":
         help="Base URL of the environment server",
     )
     args = parser.parse_args()
-    run_inference(args.base_url)
+    main(args.base_url)
