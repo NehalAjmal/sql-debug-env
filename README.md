@@ -106,7 +106,7 @@ python baseline.py
 pip install openenv-core openai requests
 export API_BASE_URL="https://api.groq.com/openai/v1"
 export MODEL_NAME="llama-3.3-70b-versatile"
-export HF_TOKEN="your_key"
+export API_KEY="your_key"
 python inference.py --base-url https://nehubaby-sql-debug-env.hf.space
 ```
 

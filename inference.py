@@ -22,7 +22,7 @@ from openai import OpenAI
 # Mandatory env variables (per hackathon spec)
 # ---------------------------------------------------------------------------
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 
 # ---------------------------------------------------------------------------
