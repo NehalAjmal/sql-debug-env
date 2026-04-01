@@ -201,6 +201,11 @@ def run_baseline() -> dict[str, Any]:
     }
 
 
+@app.get("/")
+def root():
+    return {"message": "SQL Debug Environment is running"}
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
