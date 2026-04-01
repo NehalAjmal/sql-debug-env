@@ -215,18 +215,32 @@ def _score_query(task: dict[str, Any], query: str) -> tuple[float, str]:
     if not got:
         return 0.1, "Query executed but returned no rows. Check your conditions."
 
+    # Check exact row overlap
     overlap = len(got & expected)
     total = len(expected)
-    partial = overlap / total if total > 0 else 0.0
 
     if overlap > 0:
+        partial = overlap / total
         return round(0.3 + 0.5 * partial, 2), (
             f"Partially correct: {overlap}/{total} expected rows matched. "
-            f"Got: {list(rows)}"
+            f"Got: {list(rows)[:3]}"
         )
 
-    return 0.2, f"Query executed but result doesn't match. Got: {list(rows)}"
+    # Check partial column overlap — some correct values present
+    expected_flat = set(v for row in task["expected_result"] for v in row)
+    got_flat = set(v for row in rows for v in row)
+    col_overlap = len(expected_flat & got_flat)
+    col_total = len(expected_flat)
 
+    if col_overlap > 0 and col_total > 0:
+        partial = col_overlap / col_total
+        if partial >= 0.5:
+            return round(0.2 + 0.1 * partial, 2), (
+                f"Query ran but columns/values don't fully match. "
+                f"Got: {list(rows)[:3]}"
+            )
+
+    return 0.2, f"Query executed but result doesn't match. Got: {list(rows)[:3]}"
 
 class SqlDebugEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
