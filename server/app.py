@@ -191,7 +191,7 @@ Return ONLY the corrected SQL query with no explanation, no markdown, no backtic
 
 @app.post("/baseline")
 def run_baseline() -> dict[str, Any]:
-    """Run the baseline agent across all 3 tasks and return scores."""
+    """Run the baseline agent across all 4 tasks and return scores."""
     results = [_run_baseline_for_task(task) for task in TASKS]
     total_score = sum(r["score"] for r in results) / len(results)
     return {
