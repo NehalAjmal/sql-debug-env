@@ -41,7 +41,7 @@ SQL debugging is a task every software engineer and data analyst encounters regu
 | `db_schema` | string | Database schema as CREATE TABLE statements |
 | `error_hint` | string | Hint about what's wrong |
 | `task_description` | string | Natural language description of the task |
-| `difficulty` | string | Task difficulty: easy / medium / hard |
+| `difficulty` | string | Task difficulty: easy / medium / hard / expert |
 | `score` | float | Score for the last submitted query (0.0–1.0) |
 | `feedback` | string | Feedback on the submitted query |
 | `attempt` | int | Current attempt number |
@@ -70,8 +70,8 @@ Expected difficulty: requires deep understanding of SQL window functions.
 ## Reward Function
 
 - **1.0** — Query executes and returns exactly the expected result
-- **0.3–0.8** — Partial credit for queries that return some correct rows
-- **0.2** — Query executes but returns wrong rows
+- **0.3–0.8** — Partial credit for queries returning some correct rows
+- **0.2–0.25** — Query executes but result partially or fully mismatches
 - **0.1** — Query executes but returns no rows
 - **0.0** — Query fails to execute (syntax/runtime error)
 - **Penalty** — Each additional attempt after the first reduces reward by 0.05
@@ -112,7 +112,7 @@ python inference.py --base-url https://nehubaby-sql-debug-env.hf.space
 
 ### Run against deployed Space
 ```bash
-python baseline.py --base-url https://your-username-sql-debug-env.hf.space
+python inference.py --base-url https://nehubaby-sql-debug-env.hf.space
 ```
 
 ## API Endpoints
