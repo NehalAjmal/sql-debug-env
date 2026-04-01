@@ -25,7 +25,7 @@ from openai import OpenAI
 # Config
 # ---------------------------------------------------------------------------
 
-DEFAULT_BASE_URL = "http://localhost:8000"
+DEFAULT_BASE_URL = "https://nehubaby-sql-debug-env.hf.space"
 
 
 def get_llm_client():
