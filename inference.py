@@ -22,7 +22,7 @@ from openai import OpenAI
 # Mandatory env variables (per hackathon spec)
 # ---------------------------------------------------------------------------
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 
 # ---------------------------------------------------------------------------
@@ -54,15 +54,19 @@ Broken SQL Query:
 Hint: {task.get('error_hint', '')}{feedback_section}
 
 Return ONLY the corrected SQL query with no explanation, no markdown, no backticks."""
-
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=TEMPERATURE,
-        max_tokens=MAX_TOKENS,
-        stream=False,
-    )
-    return response.choices[0].message.content.strip() or ""
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+            stream=False,
+        )
+        return response.choices[0].message.content.strip() or ""
+    
+    except Exception as e:
+        print(f"Error during LLM call: {e}")
+        return ""  # Return empty string on error to avoid crashing the episode run
 
 
 def run_episode(base_url: str, client: OpenAI) -> dict:
