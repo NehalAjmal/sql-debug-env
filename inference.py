@@ -91,6 +91,11 @@ def run_episode(base_url: str, client: OpenAI) -> dict:
     for task in tasks:
         task_id = task["task_id"]
         difficulty = task["difficulty"]
+        
+        # ### ADDED FOR HACKATHON VALIDATOR ###
+        print(f"[START] task={task_id}", flush=True)
+        # #####################################
+
         print(f"\n  Task: {task_id} [{difficulty.upper()}]")
         print(f"  Broken: {task['broken_query']}")
 
@@ -121,8 +126,12 @@ def run_episode(base_url: str, client: OpenAI) -> dict:
             reward = max(0.0, score - attempt_penalty)
             total_reward += reward
             total_steps += 1
-
+            
             print(f"           Score: {score} | Reward: {reward:.2f} | {feedback[:60]}")
+
+            # ### ADDED FOR HACKATHON VALIDATOR ###
+            print(f"[STEP] step={attempt} reward={reward}", flush=True)
+            # #####################################
 
             if score > best_score:
                 best_score = score
@@ -133,6 +142,10 @@ def run_episode(base_url: str, client: OpenAI) -> dict:
             if score == 1.0:
                 print(f"           ✓ Solved in {attempt} attempt(s)!")
                 break
+
+        # ### ADDED FOR HACKATHON VALIDATOR ###
+        print(f"[END] task={task_id} score={best_score} steps={attempt}", flush=True)
+        # #####################################
 
         task_results.append({
             "task_id": task_id,
