@@ -4,22 +4,23 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 7860
-description: "An RL environment where an AI agent debugs and fixes broken SQL queries"
+description: "A multi-turn RL environment where an AI agent explores a database via SQL queries to answer business questions — like a real data analyst"
 tags:
   - openenv
   - sql
-  - debugging
+  - multi-turn
+  - data-analysis
   - real-world
 tasks:
   - id: task_easy
     difficulty: easy
-    description: "Fix a SELECT query with syntax typos"
+    description: "Count employees per department (1+ queries needed)"
   - id: task_medium
     difficulty: medium
-    description: "Fix a broken JOIN condition"
+    description: "Find top sales performer in Q1 2024 (2+ queries needed)"
   - id: task_hard
     difficulty: hard
-    description: "Fix a GROUP BY query with wrong HAVING threshold"
+    description: "Calculate project budget to salary ratios by department (3+ queries needed)"
   - id: task_expert
     difficulty: expert
-    description: "Fix a broken window function query with two bugs"
+    description: "Find employee with best sales efficiency score (3+ queries needed)"

@@ -1,6 +1,9 @@
 """
-Inference Script for SQL Debug Environment
-===================================
+Inference Script for SQL Data Detective Environment
+====================================================
+Multi-turn RL agent that explores a database by running SQL queries,
+then submits a final answer to business questions.
+
 MANDATORY environment variables:
   API_BASE_URL  The API endpoint for the LLM.
   MODEL_NAME    The model identifier to use for inference.
@@ -10,225 +13,250 @@ MANDATORY environment variables:
 - Participants must use OpenAI Client for all LLM calls using above variables
 """
 
-import argparse
-import json
 import os
 import sys
-
+import json
 import requests
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
-# Mandatory env variables (per hackathon spec)
+# Mandatory env variables
 # ---------------------------------------------------------------------------
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-MAX_STEPS = 3        # max attempts per task
-TEMPERATURE = 0.0    # deterministic for reproducibility
-MAX_TOKENS = 300
-DEFAULT_BASE_URL = "http://localhost:7860"
+MAX_EXPLORE_STEPS = 6          # max SQL queries per task before forcing answer
+TEMPERATURE = 0.0
+MAX_TOKENS = 500
+DEFAULT_BASE_URL = "https://nehubaby-sql-debug-env.hf.space"
+BENCHMARK = "sql-debug-env"
+
+SYSTEM_PROMPT = """You are a data analyst investigating a company database.
+You receive a business question and must answer it by exploring the database.
+
+At each turn you MUST respond with EXACTLY one of these two formats:
+1. To run a SQL query:   SQL: <your query>
+2. To submit your final answer:   ANSWER: <your answer>
+
+Rules:
+- Start by exploring relevant tables to understand the data
+- Build up your understanding step by step
+- When confident, submit your answer
+- Your answer should be concise and include the key values asked for
+- Do NOT include any other text outside the SQL: or ANSWER: format"""
 
 
-def get_llm_response(client: OpenAI, task: dict, feedback: str = "", attempt: int = 0) -> str:
+def build_initial_prompt(observation: dict) -> str:
+    """Build the initial user prompt from the reset observation."""
+    return (
+        f"Business Question: {observation.get('question', '')}\n\n"
+        f"Database Schema:\n{observation.get('db_schema', '')}\n\n"
+        f"Difficulty: {observation.get('difficulty', 'unknown')}\n\n"
+        "Explore the database with SQL queries, then submit your answer."
+    )
+
+
+def parse_llm_response(reply: str) -> tuple[str, str]:
     """
-    Given a task observation, ask the LLM to fix the SQL query.
-    Includes previous feedback on retries.
+    Parse LLM response into (action_type, content).
+    Returns ('query', sql) or ('answer', answer_text).
     """
-    feedback_section = f"\nPrevious attempt feedback: {feedback}" if feedback and attempt > 0 else ""
+    stripped = reply.strip()
 
-    prompt = f"""You are an expert SQL debugger.
+    # Check for SQL: prefix
+    for prefix in ["SQL:", "sql:", "Sql:"]:
+        if stripped.startswith(prefix):
+            return "query", stripped[len(prefix):].strip()
 
-Database Schema:
-{task.get('db_schema', '')}
+    # Check for ANSWER: prefix
+    for prefix in ["ANSWER:", "answer:", "Answer:"]:
+        if stripped.startswith(prefix):
+            return "answer", stripped[len(prefix):].strip()
 
-Task: {task.get('description', '')}
+    # Check for ```sql code blocks
+    if "```sql" in stripped:
+        sql_start = stripped.index("```sql") + 6
+        sql_end = stripped.index("```", sql_start) if "```" in stripped[sql_start:] else len(stripped)
+        return "query", stripped[sql_start:sql_end].strip()
 
-Broken SQL Query:
-{task.get('broken_query', '')}
+    # Fallback: if it looks like SQL, treat as query
+    sql_keywords = ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "WITH"]
+    upper = stripped.upper()
+    if any(upper.startswith(kw) for kw in sql_keywords):
+        return "query", stripped
 
-Hint: {task.get('error_hint', '')}{feedback_section}
-
-Return ONLY the corrected SQL query with no explanation, no markdown, no backticks."""
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-            stream=False,
-        )
-        return response.choices[0].message.content.strip() or ""
-    
-    except Exception as e:
-        print(f"Error during LLM call: {e}")
-        return ""  # Return empty string on error to avoid crashing the episode run
+    # Otherwise treat as answer
+    return "answer", stripped
 
 
-def run_episode(base_url: str, client: OpenAI) -> dict:
-    """
-    Run a full RL episode across all tasks:
-      - Fetch tasks from /tasks
-      - For each task: attempt up to MAX_STEPS fixes using the LLM
-      - Score each attempt via /grader
-      - Track rewards and results
-    """
-    # Get all tasks
-    tasks_resp = requests.get(f"{base_url}/tasks", timeout=30)
-    tasks_resp.raise_for_status()
-    tasks = tasks_resp.json()["tasks"]
+def run_episode(base_url: str, client: OpenAI) -> None:
+    """Run a full episode: reset → multi-turn explore → answer for each task."""
 
-    print(f"\n  Found {len(tasks)} tasks in environment")
+    # Reset the environment — use stateful /env/reset for session persistence
+    reset_resp = requests.post(f"{base_url}/env/reset", json={}, timeout=30)
+    reset_resp.raise_for_status()
+    reset_data = reset_resp.json()
+    session_id = reset_data.get("session_id", "")
+    obs = reset_data.get("observation", reset_data)
 
-    total_reward = 0.0
-    total_steps = 0
-    task_results = []
+    while True:
+        task_id = obs.get("task_id", "unknown")
+        question = obs.get("question", "")
+        difficulty = obs.get("difficulty", "")
 
-    for task in tasks:
-        task_id = task["task_id"]
-        difficulty = task["difficulty"]
-        
-        # ### ADDED FOR HACKATHON VALIDATOR ###
-        print(f"[START] task={task_id}", flush=True)
-        # #####################################
+        # [START]
+        print(f"[START] task={task_id} env={BENCHMARK} model={MODEL_NAME}", flush=True)
 
-        print(f"\n  Task: {task_id} [{difficulty.upper()}]")
-        print(f"  Broken: {task['broken_query']}")
+        # Build conversation for this task
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": build_initial_prompt(obs)},
+        ]
 
-        best_score = 0.0
-        best_query = ""
-        best_feedback = ""
-        feedback = ""
+        all_rewards = []
+        success = False
+        step_num = 0
+        final_answer = ""
+        final_score = 0.0
 
-        for attempt in range(1, MAX_STEPS + 1):
-            # LLM generates a fix
-            fixed_query = get_llm_response(client, task, feedback, attempt)
-            print(f"  Attempt {attempt}: {fixed_query[:80]}...")
+        for explore_step in range(1, MAX_EXPLORE_STEPS + 2):  # +1 for final answer step
+            step_num = explore_step
 
-            # Grade the fix via /grader
-            grade_resp = requests.post(
-                f"{base_url}/grader",
-                json={"task_id": task_id, "fixed_query": fixed_query},
-                timeout=30,
-            )
-            grade_resp.raise_for_status()
-            grade = grade_resp.json()
+            try:
+                # Get LLM response
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=messages,
+                    temperature=TEMPERATURE,
+                    max_tokens=MAX_TOKENS,
+                    stream=False,
+                )
+                reply = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
+                messages.append({"role": "assistant", "content": reply})
 
-            score = grade["score"]
-            feedback = grade["feedback"]
+                # Parse LLM response
+                action_type, content = parse_llm_response(reply)
 
-            # Reward with attempt penalty (matches environment reward logic)
-            attempt_penalty = (attempt - 1) * 0.05
-            reward = max(0.0, score - attempt_penalty)
-            total_reward += reward
-            total_steps += 1
-            
-            print(f"           Score: {score} | Reward: {reward:.2f} | {feedback[:60]}")
+                # Force answer on last step
+                if explore_step >= MAX_EXPLORE_STEPS and action_type == "query":
+                    action_type = "answer"
+                    content = content if content else "Unable to determine answer"
 
-            # ### ADDED FOR HACKATHON VALIDATOR ###
-            print(f"[STEP] step={attempt} reward={reward}", flush=True)
-            # #####################################
+                # Build action payload
+                if action_type == "query":
+                    action_payload = {
+                        "action": {
+                            "action_type": "query",
+                            "sql": content,
+                            "answer": "",
+                        }
+                    }
+                else:
+                    action_payload = {
+                        "action": {
+                            "action_type": "answer",
+                            "sql": "",
+                            "answer": content,
+                        }
+                    }
+                    final_answer = content
 
-            if score > best_score:
-                best_score = score
-                best_query = fixed_query
-                best_feedback = feedback
+                # Step the environment — use stateful /env/step with session_id
+                step_payload = {
+                    "session_id": session_id,
+                    "action": action_payload["action"],
+                }
+                step_resp = requests.post(
+                    f"{base_url}/env/step",
+                    json=step_payload,
+                    timeout=30,
+                )
+                step_resp.raise_for_status()
+                step_data = step_resp.json()
+                obs = step_data.get("observation", step_data)
 
-            # Stop early if solved
-            if score == 1.0:
-                print(f"           ✓ Solved in {attempt} attempt(s)!")
+                reward = step_data.get("reward", obs.get("reward", 0.0))
+                done = step_data.get("done", obs.get("done", False))
+                score = obs.get("score", 0.0)
+                final_score = score
+
+                all_rewards.append(reward)
+
+                # Build action string for logging
+                if action_type == "query":
+                    action_str = f"SQL: {content[:70]}"
+                else:
+                    action_str = f"ANSWER: {content[:70]}"
+
+                # [STEP]
+                print(
+                    f"[STEP] step={step_num} action={action_str} "
+                    f"reward={reward:.2f} done={str(done).lower()} error=null",
+                    flush=True,
+                )
+
+                if action_type == "query":
+                    # Feed query result back to LLM
+                    query_result = obs.get("query_result", "")
+                    query_error = obs.get("query_error", "")
+                    feedback = obs.get("feedback", "")
+
+                    if query_error:
+                        result_msg = f"Query error: {query_error}\n{feedback}"
+                    else:
+                        result_msg = f"Query result:\n{query_result}\n\n{feedback}"
+
+                    messages.append({"role": "user", "content": result_msg})
+
+                if action_type == "answer":
+                    success = score >= 0.8
+                    break
+
+                if done:
+                    break
+
+            except Exception as e:
+                all_rewards.append(0.0)
+                print(
+                    f"[STEP] step={step_num} action=null "
+                    f"reward=0.00 done=false error={str(e)[:80]}",
+                    flush=True,
+                )
                 break
 
-        # ### ADDED FOR HACKATHON VALIDATOR ###
-        print(f"[END] task={task_id} score={best_score} steps={attempt}", flush=True)
-        # #####################################
+        # [END]
+        rewards_str = ",".join(f"{r:.2f}" for r in all_rewards) if all_rewards else "0.00"
+        print(
+            f"[END] success={str(success).lower()} steps={len(all_rewards)} score={final_score:.2f} rewards={rewards_str}",
+            flush=True,
+        )
 
-        task_results.append({
-            "task_id": task_id,
-            "difficulty": difficulty,
-            "fixed_query": best_query,
-            "score": best_score,
-            "feedback": best_feedback,
-            "attempts": attempt,
-        })
+        # Check if episode is done (all tasks completed)
+        done = obs.get("done", False)
+        if done:
+            break
 
-    return {
-        "total_reward": total_reward,
-        "steps": total_steps,
-        "task_results": task_results,
-    }
+        # If not done, obs already contains the next task info
+        # (the environment advances to next task after an answer)
 
 
 def main(base_url: str = DEFAULT_BASE_URL) -> None:
-    if not API_KEY:
-        print("ERROR: Set HF_TOKEN or API_KEY environment variable.")
-        sys.exit(1)
-
-    # Initialize OpenAI-compatible client with mandatory env variables
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-
-    print(f"\n{'='*60}")
-    print("SQL Debug Environment — Inference Evaluation")
-    print(f"Server    : {base_url}")
-    print(f"Model     : {MODEL_NAME}")
-    print(f"API URL   : {API_BASE_URL}")
-    print(f"Max Steps : {MAX_STEPS} per task")
-    print(f"{'='*60}")
-
-    # Verify environment is healthy
-    health = requests.get(f"{base_url}/health", timeout=10)
-    health.raise_for_status()
-    print(f"\nEnvironment health: {health.json()}")
-
-    # Run the RL episode
-    print("\nStarting RL episode...")
-    episode = run_episode(base_url, client)
-
-    # Summary
-    task_results = episode["task_results"]
-    total_score = sum(r["score"] for r in task_results) / len(task_results) if task_results else 0.0
-
-    print(f"\n{'='*60}")
-    print("EPISODE COMPLETE")
-    print(f"{'='*60}")
-    print(f"Total reward : {episode['total_reward']:.4f}")
-    print(f"Total steps  : {episode['steps']}")
-    print(f"Tasks solved : {sum(1 for r in task_results if r['score'] == 1.0)}/{len(task_results)}")
-    print(f"Mean score   : {total_score:.4f}")
-    print(f"Model        : {MODEL_NAME}")
-    print(f"{'='*60}\n")
-
-    # Per-task breakdown
-    for r in task_results:
-        status = "✓" if r["score"] == 1.0 else "✗"
-        print(f"  {status} {r['task_id']:15s} [{r['difficulty']:6s}] score={r['score']} attempts={r['attempts']}")
-
-    # Save results
-    output = {
-        "model": MODEL_NAME,
-        "api_base_url": API_BASE_URL,
-        "base_url": base_url,
-        "total_reward": episode["total_reward"],
-        "total_score": round(total_score, 4),
-        "steps": episode["steps"],
-        "task_results": task_results,
-    }
-
-    with open("inference_results.json", "w") as f:
-        json.dump(output, f, indent=2)
-    print("\nResults saved to inference_results.json")
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+    run_episode(base_url, client)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SQL Debug Env Inference")
-    parser.add_argument(
-        "--base-url",
-        default=DEFAULT_BASE_URL,
-        help="Base URL of the environment server",
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="SQL Data Detective — Multi-turn inference agent"
     )
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     args = parser.parse_args()
     main(args.base_url)

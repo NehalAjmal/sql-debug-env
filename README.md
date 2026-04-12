@@ -1,147 +1,238 @@
 ---
-title: SQL Debug Environment
-emoji: 🛠️
+title: SQL Data Detective
+emoji: 🔍
 colorFrom: blue
-colorTo: green
+colorTo: purple
 sdk: docker
 pinned: false
 tags:
   - openenv
 ---
 
-# SQL Debug Environment
+# SQL Data Detective 🔍
 
-An OpenEnv reinforcement learning environment where an AI agent debugs and fixes broken SQL queries. This models a real-world task that developers face daily — identifying and correcting SQL errors given a schema and a broken query.
+A **multi-turn** OpenEnv reinforcement learning environment where an AI agent investigates business questions by exploring a company database through SQL queries — like a real data analyst.
+
+## Why Multi-Turn?
+
+Unlike one-shot environments, this environment requires **genuine multi-step reasoning**:
+- The agent doesn't know the answer upfront — it must **explore**
+- Each SQL query reveals new information that shapes the next query
+- The agent must decide **when it has enough information** to answer
+- Efficiency matters: fewer queries for the same accuracy = higher reward
+
+This mirrors the real-world workflow of a data analyst: receive a question → explore the data → build understanding → deliver an answer.
 
 ## Environment Description
 
-The agent receives a broken SQL query along with the database schema and a hint about what's wrong. It must return a corrected SQL query that executes successfully and produces the expected result. The environment uses an in-memory SQLite database so no external database setup is needed.
+The agent receives a natural language business question about a company database (employees, projects, sales, expenses). At each step, the agent either:
+1. **Runs a SQL query** to explore the database and receives actual query results
+2. **Submits a final answer** when confident enough
 
-## Motivation
-
-SQL debugging is a task every software engineer and data analyst encounters regularly. Existing RL benchmarks focus heavily on games and synthetic puzzles, leaving a gap for environments grounded in real developer workflows. This environment fills that gap — it provides a structured, reproducible way to train and evaluate LLM agents on a skill that has immediate practical value. The programmatic grader means evaluation is fully automated with no human labeling required, making it ideal for large-scale agent training pipelines.
+The environment uses an in-memory SQLite database — no external setup needed.
 
 ## Action Space
+
 ```json
 {
-  "fixed_query": "SELECT name, age FROM employees;"
+  "action_type": "query",
+  "sql": "SELECT department, COUNT(*) FROM employees GROUP BY department",
+  "answer": ""
+}
+```
+
+or
+
+```json
+{
+  "action_type": "answer",
+  "sql": "",
+  "answer": "Engineering: 4, Marketing: 3, HR: 3"
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
-| `fixed_query` | string | The agent's corrected SQL query |
+| `action_type` | string | `"query"` to run SQL, `"answer"` to submit final answer |
+| `sql` | string | SQL query to execute (when `action_type` is `"query"`) |
+| `answer` | string | Final answer text (when `action_type` is `"answer"`) |
 
 ## Observation Space
 
 | Field | Type | Description |
 |---|---|---|
 | `task_id` | string | Current task identifier |
-| `broken_query` | string | The broken SQL query to fix |
-| `db_schema` | string | Database schema as CREATE TABLE statements |
-| `error_hint` | string | Hint about what's wrong |
-| `task_description` | string | Natural language description of the task |
+| `question` | string | Business question to answer |
+| `db_schema` | string | Database schema (CREATE TABLE statements) |
+| `last_action_type` | string | Type of last action taken |
+| `last_sql` | string | Last SQL query executed |
+| `query_result` | string | Formatted result of last SQL query |
+| `query_error` | string | Error message if last query failed |
+| `query_count` | int | Number of SQL queries executed so far |
+| `max_steps` | int | Maximum steps allowed (8) |
+| `step` | int | Current step number |
+| `score` | float | Score achieved (0.0–1.0, set on answer submission) |
+| `feedback` | string | Feedback on the last action |
 | `difficulty` | string | Task difficulty: easy / medium / hard / expert |
-| `score` | float | Score for the last submitted query (0.0–1.0) |
-| `feedback` | string | Feedback on the submitted query |
-| `attempt` | int | Current attempt number |
-| `max_attempts` | int | Maximum attempts allowed (3) |
-| `reward` | float | Reward signal for this step |
+| `answer_submitted` | string | The submitted answer text |
+| `reward` | float | Reward signal incorporating correctness + efficiency |
 | `done` | bool | Whether the episode is complete |
+
+## Database Schema
+
+```sql
+CREATE TABLE employees (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    department TEXT NOT NULL,
+    salary REAL NOT NULL,
+    hire_year INTEGER NOT NULL,
+    manager_id INTEGER
+);
+
+CREATE TABLE projects (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    department TEXT NOT NULL,
+    budget REAL NOT NULL,
+    status TEXT NOT NULL  -- 'active' or 'completed'
+);
+
+CREATE TABLE sales (
+    id INTEGER PRIMARY KEY,
+    employee_id INTEGER NOT NULL,
+    product TEXT NOT NULL,
+    amount REAL NOT NULL,
+    sale_date TEXT NOT NULL,
+    region TEXT NOT NULL
+);
+
+CREATE TABLE expenses (
+    id INTEGER PRIMARY KEY,
+    department TEXT NOT NULL,
+    category TEXT NOT NULL,
+    amount REAL NOT NULL,
+    expense_date TEXT NOT NULL
+);
+```
 
 ## Tasks
 
-### Task 1 — Easy: Syntax Error Fix
-The agent fixes a SELECT query with two keyword typos (`SELEC` and `FORM`).
-Expected difficulty: any competent LLM should score 1.0.
+### Task 1 — Easy: Department Employee Count
+Count employees per department, ordered by headcount. Requires 1+ queries.
+A warm-up task that any competent agent should solve in 1–2 queries.
 
-### Task 2 — Medium: Wrong JOIN Condition
-The agent fixes a JOIN query where the ON condition matches the wrong columns (`employees.id` instead of `employees.dept_id`).
-Expected difficulty: requires understanding of relational schema structure.
+### Task 2 — Medium: Top Sales in Q1 2024
+Find the employee with highest total sales revenue in January–March 2024.
+Requires joining employees and sales tables with date filtering. 2+ queries expected.
 
-### Task 3 — Hard: GROUP BY with Wrong HAVING Threshold
-The agent fixes a GROUP BY query that finds departments with high earners, but the HAVING clause uses the wrong comparison operator and threshold.
-Expected difficulty: requires understanding of aggregation filtering logic.
+### Task 3 — Hard: Budget-to-Salary Ratio
+For departments with active projects, calculate the ratio of total project budget to total salary.
+Requires combining data from employees, projects tables with filtering and aggregation. 3+ queries expected.
 
-### Task 4 — Expert: Broken Window Functions
-The agent fixes two bugs in a window function query — a wrong ORDER BY direction in RANK() and a wrong PARTITION BY column in MAX().
-Expected difficulty: requires deep understanding of SQL window functions.
+### Task 4 — Expert: Sales Efficiency Score
+Find the employee with the best "efficiency score" (total sales / salary) among those with 2+ sales.
+Requires joining employees and sales, filtering, and computing derived metrics. 3+ queries expected.
 
 ## Reward Function
 
-- **1.0** — Query executes and returns exactly the expected result
-- **0.3–0.8** — Partial credit for queries returning some correct rows
-- **0.2–0.25** — Query executes but result partially or fully mismatches
-- **0.1** — Query executes but returns no rows
-- **0.0** — Query fails to execute (syntax/runtime error)
-- **Penalty** — Each additional attempt after the first reduces reward by 0.05
+The reward combines **correctness** and **query efficiency**:
 
-## Baseline Scores
+- **Correctness (70% weight)**:
+  - `1.0` — All key values present in the answer
+  - `0.5–0.7` — Partial credit for some correct values
+  - `0.8` — Answer contains right info but in unexpected format
+  - `0.0` — Incorrect answer
 
-| Task | Difficulty | Model | Score |
-|---|---|---|---|
-| task_easy | Easy | llama-3.3-70b-versatile | 1.0 |
-| task_medium | Medium | llama-3.3-70b-versatile | 1.0 |
-| task_hard | Hard | llama-3.3-70b-versatile | 1.0 |
-| task_expert | Expert | llama-3.3-70b-versatile | 1.0 |
-| **Overall** | | | **1.0** |
+- **Efficiency bonus (30% weight)**:
+  - Using `min_queries` or fewer: full 30% bonus
+  - Each extra query beyond minimum: –8% penalty on bonus
+  - Running out of steps without answering: 0.0 reward
+
+- **Formula**: `reward = score × (0.7 + 0.3 × efficiency)`
 
 ## Setup & Usage
 
-### Run locally with Docker
+### Run locally
 ```bash
-docker build -t sql-debug-env:latest .
-docker run -p 7860:7860 -e API_BASE_URL="https://api.groq.com/openai/v1" -e MODEL_NAME="llama-3.3-70b-versatile" -e HF_TOKEN="your_key" sql-debug-env:latest
+uv sync
+python -m uvicorn server.app:app --host 0.0.0.0 --port 7860
 ```
 
-### Run baseline script
+### Run with Docker
 ```bash
-pip install openenv-core openai requests
+docker build -t sql-detective:latest .
+docker run -p 7860:7860 sql-detective:latest
+```
+
+### Run inference (multi-turn agent)
+```bash
+export HF_TOKEN="your_key"
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
+python inference.py --base-url http://localhost:7860
+```
+
+### Run baseline
+```bash
 export GROQ_API_KEY="your_key"
-python baseline.py
-```
-
-### Run inference script
-```bash
-pip install openenv-core openai requests
-export API_BASE_URL="https://api.groq.com/openai/v1"
-export MODEL_NAME="llama-3.3-70b-versatile"
-export API_KEY="your_key"
-python inference.py --base-url https://nehubaby-sql-debug-env.hf.space
-```
-
-### Run against deployed Space
-```bash
-python inference.py --base-url https://nehubaby-sql-debug-env.hf.space
+python baseline.py --base-url http://localhost:7860
 ```
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
+| `/` | GET | Environment info |
 | `/health` | GET | Health check |
-| `/reset` | POST | Start a new episode |
-| `/step` | POST | Submit a fixed query |
-| `/state` | GET | Get current episode state |
+| `/reset` | POST | Start a stateless episode (framework built-in) |
+| `/step` | POST | Submit action to a stateless episode (framework built-in) |
+| `/state` | GET | Get stateless episode state |
+| `/env/reset` | POST | **Stateful:** Start a new multi-turn session (returns `session_id`) |
+| `/env/step` | POST | **Stateful:** Submit action using `{"session_id": "...", "action": {...}}` |
+| `/env/state/{id}` | GET | **Stateful:** Get current state of a specific session |
 | `/tasks` | GET | List all tasks and action schema |
-| `/grader` | POST | Score a query against a specific task |
-| `/baseline` | POST | Run baseline agent across all tasks |
+| `/grader` | POST | Score an answer against a specific task |
+| `/baseline` | POST | Run baseline multi-turn agent |
 
-## Example Interaction
+## Example Multi-Turn Interaction
+
 ```python
 import requests
 
 base = "http://localhost:7860"
 
-# Start episode
-obs = requests.post(f"{base}/reset").json()
-print(obs["observation"]["broken_query"])
-# SELEC name, age FORM employees;
+# Start stateful episode
+res = requests.post(f"{base}/env/reset", json={}).json()
+session_id = res["session_id"]
+obs = res["observation"]
+print(obs["question"])
+# "How many employees are in each department? ..."
 
-# Submit fix
-result = requests.post(f"{base}/step", json={
-    "action": {"fixed_query": "SELECT name, age FROM employees;"}
+# Step 1: Explore
+result = requests.post(f"{base}/env/step", json={
+    "session_id": session_id,
+    "action": {
+        "action_type": "query",
+        "sql": "SELECT department, COUNT(*) as cnt FROM employees GROUP BY department ORDER BY cnt DESC",
+        "answer": ""
+    }
 }).json()
-print(result["observation"]["score"])  # 1.0
-print(result["observation"]["feedback"])  # Perfect!
+print(result["observation"]["query_result"])
+# Engineering | 4
+# Marketing | 3
+# HR | 3
+
+# Step 2: Submit answer
+result = requests.post(f"{base}/env/step", json={
+    "session_id": session_id,
+    "action": {
+        "action_type": "answer",
+        "sql": "",
+        "answer": "Engineering: 4, Marketing: 3, HR: 3"
+    }
+}).json()
+print(result["observation"]["score"])   # 1.0
+print(result["observation"]["reward"])  # 1.0
+# Environment automatically advances to next task
 ```

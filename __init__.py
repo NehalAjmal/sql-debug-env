@@ -4,13 +4,13 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Sql Debug Env Environment."""
+"""SQL Data Detective Environment."""
 
-from .client import SqlDebugEnv
-from .models import SqlDebugAction, SqlDebugObservation
+from .client import SqlDetectiveEnv
+from .models import SqlDetectiveAction, SqlDetectiveObservation
 
 __all__ = [
-    "SqlDebugAction",
-    "SqlDebugObservation",
-    "SqlDebugEnv",
+    "SqlDetectiveAction",
+    "SqlDetectiveObservation",
+    "SqlDetectiveEnv",
 ]
