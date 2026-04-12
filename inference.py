@@ -189,11 +189,12 @@ def run_episode(base_url: str, client: OpenAI) -> None:
 
                 all_rewards.append(reward)
 
-                # Build action string for logging
+                # Build action string for logging (MUST have no newlines)
+                clean_content = content[:70].replace('\n', ' ').replace('\r', '')
                 if action_type == "query":
-                    action_str = f"SQL: {content[:70]}"
+                    action_str = f"SQL: {clean_content}"
                 else:
-                    action_str = f"ANSWER: {content[:70]}"
+                    action_str = f"ANSWER: {clean_content}"
 
                 # [STEP]
                 print(
@@ -224,9 +225,10 @@ def run_episode(base_url: str, client: OpenAI) -> None:
 
             except Exception as e:
                 all_rewards.append(0.0)
+                clean_err = str(e)[:80].replace('\n', ' ').replace('\r', '')
                 print(
                     f"[STEP] step={step_num} action=null "
-                    f"reward=0.00 done=false error={str(e)[:80]}",
+                    f"reward=0.00 done=false error={clean_err}",
                     flush=True,
                 )
                 break
