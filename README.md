@@ -173,11 +173,7 @@ export MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
 python inference.py --base-url http://localhost:7860
 ```
 
-### Run baseline
-```bash
-export GROQ_API_KEY="your_key"
-python baseline.py --base-url http://localhost:7860
-```
+
 
 ## API Endpoints
 
@@ -193,7 +189,6 @@ python baseline.py --base-url http://localhost:7860
 | `/env/state/{id}` | GET | **Stateful:** Get current state of a specific session |
 | `/tasks` | GET | List all tasks and action schema |
 | `/grader` | POST | Score an answer against a specific task |
-| `/baseline` | POST | Run baseline multi-turn agent |
 
 ## Example Multi-Turn Interaction
 
