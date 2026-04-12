@@ -264,7 +264,7 @@ def _grade_answer(task: dict, answer: str) -> tuple[float, str]:
     hits = sum(1 for kv in key_values if kv.lower() in answer_lower)
 
     if hits == len(key_values):
-        return 1.0, f"Correct! The answer '{task['expected_answer']}' is right."
+        return 0.99, f"Correct! The answer '{task['expected_answer']}' is right."
 
     if hits > 0:
         partial = hits / len(key_values)
@@ -278,7 +278,7 @@ def _grade_answer(task: dict, answer: str) -> tuple[float, str]:
         if variant.lower() in answer_lower:
             return 0.8, "Close! Answer contains the right information but may be incomplete."
 
-    return 0.0, (
+    return 0.01, (
         f"Incorrect. The answer should relate to: {task['expected_answer']}. "
         "Try running more queries to explore the data."
     )
@@ -289,8 +289,8 @@ def _compute_reward(score: float, query_count: int, min_queries: int) -> float:
     Reward function that incentivises correctness AND efficiency.
     More queries = lower reward for same score.
     """
-    if score == 0.0:
-        return 0.0
+    if score <= 0.01:
+        return 0.01
     # Efficiency bonus: fewer queries relative to min needed = higher reward
     efficiency = max(0.0, 1.0 - max(0, query_count - min_queries) * 0.08)
     return round(score * (0.7 + 0.3 * efficiency), 3)
@@ -338,7 +338,7 @@ class SqlDebugEnvironment(Environment):
             query_count=0,
             max_steps=self._max_steps,
             step=0,
-            score=0.0,
+            score=0.01,
             feedback=(
                 "New episode started. You have a database with tables: "
                 "employees, projects, sales, expenses. "
@@ -382,7 +382,7 @@ class SqlDebugEnvironment(Environment):
                     query_count=self._query_count,
                     max_steps=self._max_steps,
                     step=self._state.step_count,
-                    score=0.0,
+                    score=0.01,
                     feedback="Out of steps without submitting an answer. Score: 0.",
                     difficulty=task["difficulty"],
                     answer_submitted="",
@@ -401,7 +401,7 @@ class SqlDebugEnvironment(Environment):
                 query_count=self._query_count,
                 max_steps=self._max_steps,
                 step=self._state.step_count,
-                score=0.0,
+                score=0.01,
                 feedback=feedback + f" ({steps_left} steps remaining)",
                 difficulty=task["difficulty"],
                 answer_submitted="",
@@ -471,7 +471,7 @@ class SqlDebugEnvironment(Environment):
                 query_count=self._query_count,
                 max_steps=self._max_steps,
                 step=self._state.step_count,
-                score=0.0,
+                score=0.01,
                 feedback="Invalid action. Use action_type='query' with sql, or action_type='answer' with answer.",
                 difficulty=task["difficulty"],
                 answer_submitted="",

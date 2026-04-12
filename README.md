@@ -137,10 +137,10 @@ Requires joining employees and sales, filtering, and computing derived metrics. 
 The reward combines **correctness** and **query efficiency**:
 
 - **Correctness (70% weight)**:
-  - `1.0` — All key values present in the answer
+  - `0.99` — All key values present in the answer
   - `0.5–0.7` — Partial credit for some correct values
   - `0.8` — Answer contains right info but in unexpected format
-  - `0.0` — Incorrect answer
+  - `0.01` — Incorrect answer
 
 - **Efficiency bonus (30% weight)**:
   - Using `min_queries` or fewer: full 30% bonus

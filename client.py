@@ -67,7 +67,7 @@ class SqlDetectiveEnv(
             query_count=obs_data.get("query_count", 0),
             max_steps=obs_data.get("max_steps", 8),
             step=obs_data.get("step", 0),
-            score=obs_data.get("score", 0.0),
+            score=obs_data.get("score", 0.01),
             feedback=obs_data.get("feedback", ""),
             difficulty=obs_data.get("difficulty", ""),
             answer_submitted=obs_data.get("answer_submitted", ""),
