@@ -9,19 +9,17 @@ tags:
   - openenv
 ---
 
-# SQL Data Detective 🔍
+# 🔍 SQL Data Detective: A Multi-Turn RL Sandbox
 
-A **multi-turn** OpenEnv reinforcement learning environment where an AI agent investigates business questions by exploring a company database through SQL queries — like a real data analyst.
+Welcome to **SQL Data Detective**—a genuinely stateful, multi-turn reinforcement learning environment built for the Meta PyTorch OpenEnv ecosystem.
 
-## Why Multi-Turn?
+Instead of a simple one-shot trivia bot, this environment forces an AI agent to act like a real-world Data Analyst. The agent receives a high-level business question and must sequentially explore an SQLite database by executing actual SQL queries. It observes table returns, encounters runtime errors, refines its logic, and only submits a final answer when it successfully gathers the data.
 
-Unlike one-shot environments, this environment requires **genuine multi-step reasoning**:
-- The agent doesn't know the answer upfront — it must **explore**
-- Each SQL query reveals new information that shapes the next query
-- The agent must decide **when it has enough information** to answer
-- Efficiency matters: fewer queries for the same accuracy = higher reward
-
-This mirrors the real-world workflow of a data analyst: receive a question → explore the data → build understanding → deliver an answer.
+### ✨ Why This Stands Out
+* **True Multi-Step Reasoning**: The agent experiences a learning curve. Each query reveals new information that shapes the very next action.
+* **Stateful HTTP Sessions**: Fully compliant `/env/*` APIs preserve the interaction state seamlessly across HTTP calls.
+* **Dense Reward Function**: Agents receive a continuous reward `[0.0 to 1.0]` that factors in objective correctness *and* query efficiency. Proximal Policy models thrive on this!
+* **Scalable Complexity**: Built-in tasks progress from *Easy* (simple counts) to *Expert* (complex JOINs, aggregations, and derived metrics).
 
 ## Environment Description
 
